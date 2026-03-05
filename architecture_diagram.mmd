@@ -1,0 +1,83 @@
+graph TD
+    subgraph Browser["🌐 Browser"]
+        WS_Client["WebSocket Client<br/>(chat.html)"]
+    end
+
+    subgraph ChatApp["⚡ chat_app.py — Central Orchestrator"]
+        WSHandler["WebSocket Handler<br/>/ws endpoint"]
+        SessionState["Session State<br/>chat_history · persistent_cart<br/>image_cache · raw_io_history<br/>session_discount · bad_prompts"]
+        MsgLoop["8-Step Message Loop<br/>parse → history → classify →<br/>enrich → execute → parse →<br/>update state → send"]
+        BGTask["Background Task<br/>Customer Loyalty"]
+    end
+
+    subgraph Services["🔧 Services"]
+        HS["handoff_service.py<br/>Intent Classification<br/>IntentClassification (Pydantic)<br/>5 domains · sticky routing"]
+        AS["agent_service.py<br/>Processor Cache<br/>get_or_create_agent_processor()"]
+        FS["fallback_service.py<br/>Direct LLM Fallback<br/>call_fallback() · cora_fallback()"]
+    end
+
+    subgraph AgentProc["🤖 AgentProcessor"]
+        AP["agent_processor.py<br/>Thread Management<br/>Agent Invocation<br/>Tool Call Loop"]
+        ToolWrap["MCP Tool Wrappers<br/>mcp_product_recommendations()<br/>mcp_inventory_check()<br/>mcp_calculate_discount()<br/>mcp_create_image()"]
+    end
+
+    subgraph Utils["🛠 Utils"]
+        HU["history_utils.py<br/>parse · format · clean<br/>redact bad prompts"]
+        RU["response_utils.py<br/>extract_bot_reply()<br/>parse_agent_response()"]
+        MU["message_utils.py<br/>get_rotating_message()<br/>fast_json_dumps()"]
+        EU["env_utils.py<br/>load_env_vars()<br/>validate_env_vars()"]
+        LU["log_utils.py<br/>log_timing()<br/>log_cache_status()"]
+        SU["storage_utils.py<br/>StorageManager<br/>Azure Blob ops"]
+    end
+
+    subgraph Foundry["☁️ Azure AI Foundry"]
+        Agents["Hosted Agents<br/>cora · interior_designer<br/>inventory_agent<br/>customer_loyalty<br/>cart_manager<br/>handoff-service"]
+        Threads["Conversation Threads<br/>(server-side)"]
+    end
+
+    subgraph MCPServer["🔌 MCP Server"]
+        MCP["FastMCP at /mcp-inventory/<br/>product_search · inventory_check<br/>calculate_discount · generate_image"]
+    end
+
+    WS_Client <-->|"WebSocket JSON"| WSHandler
+    WSHandler --> SessionState
+    WSHandler --> MsgLoop
+
+    MsgLoop -->|"1. classify intent"| HS
+    MsgLoop -->|"2. get/create processor"| AS
+    MsgLoop -->|"3. execute agent"| AP
+    MsgLoop -->|"4. fallback if needed"| FS
+    MsgLoop -->|"5. parse & format"| RU
+    MsgLoop -->|"6. history mgmt"| HU
+
+    AS -->|"cache lookup/create"| AP
+    AP -->|"responses.create()"| Agents
+    AP -->|"thread create/reuse"| Threads
+    AP -->|"tool calls"| ToolWrap
+    ToolWrap -->|"HTTP calls"| MCP
+
+    HS -->|"classify via"| Agents
+    FS -->|"direct LLM call"| Agents
+
+    BGTask -->|"loyalty check"| AP
+
+    WSHandler -->|"config"| EU
+    MsgLoop -->|"timing"| LU
+    MsgLoop -->|"UI messages"| MU
+    MsgLoop -->|"file uploads"| SU
+
+    classDef browser fill:#E3F2FD,stroke:#1565C0,color:#000
+    classDef chatapp fill:#FFF3E0,stroke:#E65100,color:#000
+    classDef services fill:#E8F5E9,stroke:#2E7D32,color:#000
+    classDef agent fill:#F3E5F5,stroke:#6A1B9A,color:#000
+    classDef utils fill:#FFFDE7,stroke:#F9A825,color:#000
+    classDef foundry fill:#E0F7FA,stroke:#00838F,color:#000
+    classDef mcp fill:#FCE4EC,stroke:#AD1457,color:#000
+
+    class WS_Client browser
+    class WSHandler,SessionState,MsgLoop,BGTask chatapp
+    class HS,AS,FS services
+    class AP,ToolWrap agent
+    class HU,RU,MU,EU,LU,SU utils
+    class Agents,Threads foundry
+    class MCP mcp
